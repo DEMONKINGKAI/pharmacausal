@@ -1,0 +1,428 @@
+<title>PharmaCausal — Discovered Drug→Event Edges</title>
+<style>
+  :root {
+    --bg: #F7F8FA;
+    --surface: #FFFFFF;
+    --surface2: #F0F2F6;
+    --border: #DFE3EA;
+    --text: #1A2030;
+    --text-muted: #6B7280;
+    --accent: #3653C4;
+    --node-drug: #2F5FD1;
+    --node-event: #B23A63;
+    --status-match: #1F8F5F;
+    --status-notlabeled: #B0740C;
+    --status-nodata: #8891A0;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", "Roboto Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0B0E14;
+      --surface: #12161F;
+      --surface2: #1A2030;
+      --border: #262D3D;
+      --text: #E7ECF3;
+      --text-muted: #8A93A8;
+      --accent: #7C97F5;
+      --node-drug: #6C8EF5;
+      --node-event: #E8698A;
+      --status-match: #3FC28A;
+      --status-notlabeled: #E0A526;
+      --status-nodata: #5B6577;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0B0E14; --surface: #12161F; --surface2: #1A2030; --border: #262D3D;
+    --text: #E7ECF3; --text-muted: #8A93A8; --accent: #7C97F5;
+    --node-drug: #6C8EF5; --node-event: #E8698A;
+    --status-match: #3FC28A; --status-notlabeled: #E0A526; --status-nodata: #5B6577;
+  }
+  :root[data-theme="light"] {
+    --bg: #F7F8FA; --surface: #FFFFFF; --surface2: #F0F2F6; --border: #DFE3EA;
+    --text: #1A2030; --text-muted: #6B7280; --accent: #3653C4;
+    --node-drug: #2F5FD1; --node-event: #B23A63;
+    --status-match: #1F8F5F; --status-notlabeled: #B0740C; --status-nodata: #8891A0;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    margin: 0;
+    padding: 32px clamp(16px, 4vw, 48px) 64px;
+    line-height: 1.5;
+  }
+
+  header { max-width: 1180px; margin: 0 auto 28px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 8px;
+  }
+  h1 {
+    font-size: clamp(22px, 3vw, 30px);
+    font-weight: 700;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 14.5px;
+    max-width: 68ch;
+    margin: 0;
+  }
+
+  .stats {
+    max-width: 1180px;
+    margin: 24px auto 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat .num {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .legend {
+    max-width: 1180px;
+    margin: 20px auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    align-items: center;
+  }
+  .legend .grp { display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+  main { max-width: 1180px; margin: 28px auto 0; }
+
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 900px) { .panels { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 16px 18px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-head h2 {
+    font-size: 15px;
+    margin: 0 0 3px;
+    font-weight: 700;
+  }
+  .panel-head p {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .panel-body { padding: 6px 4px 10px; }
+
+  svg text.node-label { font-family: var(--sans); font-size: 10.5px; fill: var(--text); }
+  svg text.node-label.dim { fill: var(--text-muted); }
+  .node-circle { stroke: var(--surface); stroke-width: 1.5px; cursor: pointer; }
+  .edge-path { fill: none; cursor: pointer; transition: opacity .15s; }
+
+  #tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    opacity: 0;
+    transition: opacity .1s;
+    z-index: 10;
+    max-width: 280px;
+  }
+
+  section.latent {
+    margin-top: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px 20px;
+  }
+  section.latent h2 { font-size: 15px; margin: 0 0 4px; }
+  section.latent > p.desc { font-size: 12.5px; color: var(--text-muted); margin: 0 0 16px; max-width: 78ch; }
+  .latent-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 900px) { .latent-groups { grid-template-columns: 1fr; } }
+  .latent-groups h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted); margin: 0 0 8px; font-weight: 600;
+  }
+  .latent-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .latent-list li {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 7px; padding: 7px 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mark { color: var(--accent); font-weight: 700; }
+
+  footer {
+    max-width: 1180px; margin: 28px auto 0;
+    font-size: 12px; color: var(--text-muted);
+    border-top: 1px solid var(--border); padding-top: 16px;
+  }
+  footer p { max-width: 90ch; margin: 0 0 6px; }
+</style>
+
+<header>
+  <p class="eyebrow">pharmacausal — step 5</p>
+  <h1>Discovered drug&nbsp;→&nbsp;event edges, PC vs. FCI, checked against SIDER</h1>
+  <p class="subtitle">
+    FAERS 2026Q2 · candidate causal edges from constraint-based discovery over 141 case-level variables
+    (drug exposure, adverse event, indication, and reporting-metadata flags), with tiered background
+    knowledge enforcing that reactions cannot be oriented as causes of drug exposure.
+  </p>
+</header>
+
+<div class="stats" id="stats"></div>
+
+<div class="legend">
+  <span class="grp"><span class="dot" style="background:var(--node-drug)"></span>drug node</span>
+  <span class="grp"><span class="dot" style="background:var(--node-event)"></span>adverse event node</span>
+  <span class="grp"><span class="swatch" style="background:var(--status-match)"></span>labeled side effect in SIDER</span>
+  <span class="grp"><span class="swatch" style="background:var(--status-notlabeled)"></span>not a labeled side effect</span>
+  <span class="grp"><span class="swatch" style="background:var(--status-nodata)"></span>no SIDER data for this drug</span>
+</div>
+
+<main>
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>PC — full 141-variable graph</h2>
+        <p>N = 10,000 complete-case rows · α = 0.001 · depth ≤ 2</p>
+      </div>
+      <div class="panel-body"><svg id="svg-pc"></svg></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>FCI — candidate-edge subset (relaxes causal sufficiency)</h2>
+        <p>N = 5,000 rows · 64-node subset around PC's candidates</p>
+      </div>
+      <div class="panel-body"><svg id="svg-fci"></svg></div>
+    </div>
+  </div>
+
+  <section class="latent">
+    <h2>What FCI adds: suspected latent confounding among non drug-event pairs</h2>
+    <p class="desc">
+      Because drug/event nodes were tier-locked to always orient drug → event, FCI's uncertainty marks
+      show up on <em>other</em> edges instead. <span class="mark">○–○</span> / <span class="mark">○→</span>
+      means FCI can't rule out an unmeasured common cause; <span class="mark">↔</span> means both ends
+      point away from the nodes — a signature of a shared latent cause, not a direct causal link.
+    </p>
+    <div class="latent-groups">
+      <div>
+        <h3>Event ↔ event (likely shared symptom clusters)</h3>
+        <ul class="latent-list" id="latent-event"></ul>
+      </div>
+      <div>
+        <h3>Drug ↔ drug (likely co-prescription clustering)</h3>
+        <ul class="latent-list" id="latent-drug"></ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p><strong>Reading this graph:</strong> an edge here is a candidate hypothesis surviving confounder
+  adjustment on measured variables — not an established causal effect. FAERS has no unexposed comparison
+  population and no variable representing "was this case reported at all," so selection bias into the
+  dataset is not something any covariate here can adjust away.</p>
+  <p><strong>Reading the SIDER coloring:</strong> "not labeled" and "no SIDER data" are not evidence the
+  edge is wrong — SIDER (2015 snapshot) predates several of these drugs entirely, and under-covers
+  biologics even when older. Absence of a SIDER match is absence of external confirmation, not disproof.</p>
+</footer>
+
+<div id="tooltip"></div>
+
+<script>
+const DATA = {"pc":[{"drug":"ABALOPARATIDE","event":"Dizziness","status":"NO_SIDER_DATA"},{"drug":"ABALOPARATIDE","event":"Headache","status":"NO_SIDER_DATA"},{"drug":"ALBUTEROL","event":"Dyspnoea","status":"MATCH"},{"drug":"ALBUTEROL","event":"Pneumonia","status":"NOT_LABELED"},{"drug":"APIXABAN","event":"Anaemia","status":"MATCH"},{"drug":"BIMEKIZUMAB-BKZX","event":"Product dose omission issue","status":"NO_SIDER_DATA"},{"drug":"CETIRIZINE","event":"Alopecia","status":"MATCH"},{"drug":"CETIRIZINE","event":"Urticaria","status":"MATCH"},{"drug":"DUPILUMAB","event":"Dry skin","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Eczema","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Exposure via skin contact","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Injection site pain","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Nausea","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Product use in unapproved indication","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Pruritus","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Rash","status":"NO_SIDER_DATA"},{"drug":"EVOLOCUMAB","event":"Wrong technique in product usage process","status":"NO_SIDER_DATA"},{"drug":"GABAPENTIN","event":"Toxicity to various agents","status":"NOT_LABELED"},{"drug":"INSULIN GLARGINE","event":"Off label use","status":"NO_SIDER_DATA"},{"drug":"LENALIDOMIDE","event":"Therapy interrupted","status":"NOT_LABELED"},{"drug":"MEDROXYPROGESTERONE","event":"Meningioma","status":"MATCH"},{"drug":"METFORMIN","event":"Acute kidney injury","status":"NOT_LABELED"},{"drug":"MONTELUKAST","event":"Asthma","status":"MATCH"},{"drug":"ONDANSETRON","event":"Product use in unapproved indication","status":"NOT_LABELED"},{"drug":"RITUXIMAB","event":"Infection","status":"NO_SIDER_DATA"},{"drug":"RITUXIMAB","event":"Off label use","status":"NO_SIDER_DATA"},{"drug":"RITUXIMAB","event":"Pneumonia","status":"NO_SIDER_DATA"},{"drug":"ROSUVASTATIN","event":"Myalgia","status":"MATCH"},{"drug":"SEMAGLUTIDE","event":"Constipation","status":"NO_SIDER_DATA"},{"drug":"SEMAGLUTIDE","event":"Device malfunction","status":"NO_SIDER_DATA"},{"drug":"SEMAGLUTIDE","event":"Nausea","status":"NO_SIDER_DATA"},{"drug":"SEMAGLUTIDE","event":"Visual impairment","status":"NO_SIDER_DATA"},{"drug":"SEMAGLUTIDE","event":"Weight increased","status":"NO_SIDER_DATA"},{"drug":"SEMAGLUTIDE","event":"Wrong technique in product usage process","status":"NO_SIDER_DATA"},{"drug":"TIRZEPATIDE","event":"Incorrect dose administered","status":"NO_SIDER_DATA"},{"drug":"TIRZEPATIDE","event":"Nausea","status":"NO_SIDER_DATA"}],"fci":[{"drug":"ABALOPARATIDE","event":"Headache","status":"NO_SIDER_DATA"},{"drug":"ALBUTEROL","event":"Dyspnoea","status":"MATCH"},{"drug":"ALBUTEROL","event":"Pneumonia","status":"NOT_LABELED"},{"drug":"BIMEKIZUMAB-BKZX","event":"Product dose omission issue","status":"NO_SIDER_DATA"},{"drug":"CETIRIZINE","event":"Alopecia","status":"MATCH"},{"drug":"DUPILUMAB","event":"Dry skin","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Eczema","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Exposure via skin contact","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Injection site pain","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Product use in unapproved indication","status":"NO_SIDER_DATA"},{"drug":"DUPILUMAB","event":"Pruritus","status":"NO_SIDER_DATA"},{"drug":"EVOLOCUMAB","event":"Exposure via skin contact","status":"NO_SIDER_DATA"},{"drug":"EVOLOCUMAB","event":"Visual impairment","status":"NO_SIDER_DATA"},{"drug":"EVOLOCUMAB","event":"Wrong technique in product usage process","status":"NO_SIDER_DATA"},{"drug":"INSULIN GLARGINE","event":"Off label use","status":"NO_SIDER_DATA"},{"drug":"MEDROXYPROGESTERONE","event":"Meningioma","status":"MATCH"},{"drug":"METFORMIN","event":"Acute kidney injury","status":"NOT_LABELED"},{"drug":"RITUXIMAB","event":"Off label use","status":"NO_SIDER_DATA"},{"drug":"ROSUVASTATIN","event":"Myalgia","status":"MATCH"},{"drug":"SEMAGLUTIDE","event":"Constipation","status":"NO_SIDER_DATA"},{"drug":"SEMAGLUTIDE","event":"Nausea","status":"NO_SIDER_DATA"},{"drug":"TIRZEPATIDE","event":"Incorrect dose administered","status":"NO_SIDER_DATA"}],"latent":[{"node1":"drug__ABALOPARATIDE","node2":"drug__EVOLOCUMAB","relation":"drug__ABALOPARATIDE o--o drug__EVOLOCUMAB","end1":"o","end2":"o"},{"node1":"drug__ALBUTEROL","node2":"drug__MONTELUKAST","relation":"drug__ALBUTEROL o--> drug__MONTELUKAST","end1":"o","end2":">"},{"node1":"drug__CETIRIZINE","node2":"drug__MONTELUKAST","relation":"drug__CETIRIZINE o--> drug__MONTELUKAST","end1":"o","end2":">"},{"node1":"event__Constipation","node2":"event__Headache","relation":"event__Constipation <--> event__Headache","end1":">","end2":">"},{"node1":"event__Constipation","node2":"event__Nausea","relation":"event__Constipation o--> event__Nausea","end1":"o","end2":">"},{"node1":"event__Device malfunction","node2":"event__Product dose omission issue","relation":"event__Device malfunction o--> event__Product dose omission issue","end1":"o","end2":">"},{"node1":"event__Dizziness","node2":"event__Headache","relation":"event__Dizziness <--> event__Headache","end1":">","end2":">"},{"node1":"event__Dizziness","node2":"event__Nausea","relation":"event__Dizziness <--> event__Nausea","end1":">","end2":">"},{"node1":"event__Dry skin","node2":"event__Pruritus","relation":"event__Dry skin o--> event__Pruritus","end1":"o","end2":">"},{"node1":"event__Dyspnoea","node2":"event__Rash","relation":"event__Dyspnoea <--> event__Rash","end1":">","end2":">"},{"node1":"event__Eczema","node2":"event__Pruritus","relation":"event__Eczema <--> event__Pruritus","end1":">","end2":">"},{"node1":"event__Headache","node2":"event__Myalgia","relation":"event__Headache <--> event__Myalgia","end1":">","end2":">"},{"node1":"event__Headache","node2":"event__Nausea","relation":"event__Headache <--> event__Nausea","end1":">","end2":">"},{"node1":"event__Product use in unapproved indication","node2":"event__Urticaria","relation":"event__Product use in unapproved indication <--> event__Urticaria","end1":">","end2":">"},{"node1":"event__Pruritus","node2":"event__Rash","relation":"event__Pruritus <--> event__Rash","end1":">","end2":">"},{"node1":"event__Pruritus","node2":"event__Urticaria","relation":"event__Pruritus <--> event__Urticaria","end1":">","end2":">"}]};
+
+const STATUS_COLOR = {
+  MATCH: 'var(--status-match)',
+  NOT_LABELED: 'var(--status-notlabeled)',
+  NO_SIDER_DATA: 'var(--status-nodata)',
+};
+const STATUS_LABEL = {
+  MATCH: 'labeled side effect in SIDER',
+  NOT_LABELED: 'not a labeled side effect in SIDER',
+  NO_SIDER_DATA: 'no SIDER data for this drug',
+};
+
+function renderStats() {
+  const pcN = DATA.pc.length, fciN = DATA.fci.length;
+  const pcPairs = new Set(DATA.pc.map(d => d.drug + '→' + d.event));
+  const fciPairs = new Set(DATA.fci.map(d => d.drug + '→' + d.event));
+  let overlap = 0;
+  fciPairs.forEach(p => { if (pcPairs.has(p)) overlap++; });
+  const pcCovered = DATA.pc.filter(d => d.status !== 'NO_SIDER_DATA');
+  const pcMatch = pcCovered.filter(d => d.status === 'MATCH').length;
+  const fciCovered = DATA.fci.filter(d => d.status !== 'NO_SIDER_DATA');
+  const fciMatch = fciCovered.filter(d => d.status === 'MATCH').length;
+
+  const stats = [
+    [pcN, 'PC candidate edges'],
+    [fciN, 'FCI candidate edges'],
+    [overlap, 'agree on both graphs'],
+    [pcCovered.length + ' / ' + pcN, 'PC: SIDER coverage'],
+    [pcMatch + ' / ' + pcCovered.length, 'PC: precision on covered'],
+    [fciMatch + ' / ' + fciCovered.length, 'FCI: precision on covered'],
+  ];
+  const el = document.getElementById('stats');
+  el.innerHTML = stats.map(([num, label]) =>
+    `<div class="stat"><div class="num">${num}</div><div class="label">${label}</div></div>`
+  ).join('');
+}
+
+function renderLatent() {
+  const eventList = document.getElementById('latent-event');
+  const drugList = document.getElementById('latent-drug');
+  DATA.latent.forEach(e => {
+    const isEvent = e.node1.startsWith('event__');
+    const n1 = e.node1.replace('drug__', '').replace('event__', '');
+    const n2 = e.node2.replace('drug__', '').replace('event__', '');
+    const markMap = {'o-o': '○–○', 'o->': '○→', '>->': '↔', '>-o': '○→'};
+    let mark = '↔';
+    if (e.end1 === 'o' && e.end2 === 'o') mark = '○–○';
+    else if (e.end1 === 'o' && e.end2 === '>') mark = '○→';
+    else if (e.end1 === '>' && e.end2 === '>') mark = '↔';
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${n1}</span><span class="mark">${mark}</span><span>${n2}</span>`;
+    (isEvent ? eventList : drugList).appendChild(li);
+  });
+}
+
+function buildBipartite(svgId, edges) {
+  const svg = document.getElementById(svgId);
+  const drugs = [...new Set(edges.map(e => e.drug))].sort();
+  const events = [...new Set(edges.map(e => e.event))].sort();
+  const rowH = 22;
+  const padTop = 14;
+  const height = Math.max(drugs.length, events.length) * rowH + padTop * 2;
+  const width = 560;
+  const leftX = 130, rightX = width - 130;
+
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', height);
+
+  const drugY = {}, eventY = {};
+  drugs.forEach((d, i) => drugY[d] = padTop + i * rowH + rowH / 2);
+  events.forEach((e, i) => eventY[e] = padTop + i * rowH + rowH / 2);
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const tooltip = document.getElementById('tooltip');
+
+  function nodeEdgeIds(kind, name) {
+    return edges
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => (kind === 'drug' ? e.drug === name : e.event === name))
+      .map(({ i }) => i);
+  }
+
+  const edgeEls = [];
+
+  // edges first (under nodes)
+  edges.forEach((e, i) => {
+    const y1 = drugY[e.drug], y2 = eventY[e.event];
+    const c1x = leftX + (rightX - leftX) * 0.42;
+    const c2x = leftX + (rightX - leftX) * 0.58;
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', `M ${leftX} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${rightX} ${y2}`);
+    path.setAttribute('class', 'edge-path');
+    path.setAttribute('stroke', STATUS_COLOR[e.status]);
+    path.setAttribute('stroke-width', '1.6');
+    path.setAttribute('opacity', '0.55');
+    path.dataset.drug = e.drug;
+    path.dataset.event = e.event;
+    path.addEventListener('mousemove', (ev) => {
+      tooltip.style.opacity = '1';
+      tooltip.style.left = (ev.clientX + 14) + 'px';
+      tooltip.style.top = (ev.clientY + 10) + 'px';
+      tooltip.innerHTML = `<strong>${e.drug}</strong> → ${e.event}<br><span style="color:${STATUS_COLOR[e.status]}">${STATUS_LABEL[e.status]}</span>`;
+    });
+    path.addEventListener('mouseleave', () => { tooltip.style.opacity = '0'; });
+    svg.appendChild(path);
+    edgeEls.push(path);
+  });
+
+  function highlight(kind, name) {
+    const ids = new Set(nodeEdgeIds(kind, name));
+    edgeEls.forEach((p, i) => {
+      p.setAttribute('opacity', ids.has(i) ? '0.95' : '0.08');
+      p.setAttribute('stroke-width', ids.has(i) ? '2.4' : '1.6');
+    });
+  }
+  function unhighlight() {
+    edgeEls.forEach(p => { p.setAttribute('opacity', '0.55'); p.setAttribute('stroke-width', '1.6'); });
+  }
+
+  function addNode(name, x, y, color, anchor) {
+    const g = document.createElementNS(ns, 'g');
+    const circle = document.createElementNS(ns, 'circle');
+    circle.setAttribute('cx', x);
+    circle.setAttribute('cy', y);
+    circle.setAttribute('r', 3.4);
+    circle.setAttribute('fill', color);
+    circle.setAttribute('class', 'node-circle');
+    const text = document.createElementNS(ns, 'text');
+    text.setAttribute('x', anchor === 'end' ? x - 8 : x + 8);
+    text.setAttribute('y', y + 3.5);
+    text.setAttribute('text-anchor', anchor);
+    text.setAttribute('class', 'node-label');
+    text.textContent = name;
+    g.appendChild(circle);
+    g.appendChild(text);
+    g.style.cursor = 'pointer';
+    g.addEventListener('mouseenter', () => highlight(anchor === 'end' ? 'drug' : 'event', name));
+    g.addEventListener('mouseleave', unhighlight);
+    svg.appendChild(g);
+  }
+
+  drugs.forEach(d => addNode(d, leftX, drugY[d], 'var(--node-drug)', 'end'));
+  events.forEach(e => addNode(e, rightX, eventY[e], 'var(--node-event)', 'start'));
+}
+
+renderStats();
+renderLatent();
+buildBipartite('svg-pc', DATA.pc);
+buildBipartite('svg-fci', DATA.fci);
+</script>
