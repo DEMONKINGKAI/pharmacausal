@@ -27,6 +27,12 @@ python src/pharmacausal/discovery.py --year 2026 --quarter 2 --subsample 10000 -
 python src/pharmacausal/validate.py
 ```
 
+Unit tests cover the logic where a silent bug would corrupt results without ever raising — drug-name normalization, age-unit conversion, background-knowledge tier assignment, and PC edge parsing ([`tests/test_pharmacausal.py`](tests/test_pharmacausal.py)):
+
+```bash
+pytest tests/ -v
+```
+
 ## 1. Data: FAERS, and what confounders it actually has
 
 FAERS is a public, no-credentialing-required quarterly extract of spontaneous adverse-event reports (`DEMO`/`DRUG`/`REAC`/`OUTC`/`RPSR`/`THER`/`INDI` tables, `$`-delimited). This run used **2026Q2: 422,458 canonical cases** after dropping 4,217 retracted case IDs and deduplicating to the latest `caseversion` per case.
@@ -120,9 +126,14 @@ Side-by-side PC/FCI bipartite drug↔event graphs, edges colored by SIDER status
 ```
 pharmacausal/
 ├── src/pharmacausal/       # all pipeline code
+├── tests/                  # unit tests for the pure/deterministic logic
 ├── data/raw/, data/processed/   # gitignored — regenerate via the scripts above
 ├── reports/                # visualization artifact
 └── requirements.txt
 ```
 
 Everything downstream of `download.py` is deterministic given the same FAERS extract and `random_state=0` subsampling; the FAERS quarterly URL pattern (`faers_ascii_<year>q<quarter>.zip`) means results can be regenerated or extended to other quarters by changing `--year`/`--quarter`.
+
+## License
+
+[MIT](LICENSE)
